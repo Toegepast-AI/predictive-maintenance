@@ -1,37 +1,61 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: crack-segmentation
+  name: crack-segmentation-dockerhub
 spec:
   replicas: 1
+  progressDeadlineSeconds: 3600  # 1 hour timeout for large image pulls
   selector:
     matchLabels:
-      app: crack-segmentation
+      app: crack-segmentation-dockerhub
   template:
     metadata:
       labels:
-        app: crack-segmentation
+        app: crack-segmentation-dockerhub
     spec:
       containers:
       - name: crack-segmentation
-        image: <your-username>/crack-segmentation:latest
+        image: franklinrene/crack-segmentation:latest
+        imagePullPolicy: Always  # Always pull from Docker Hub
         ports:
         - containerPort: 5000
+        # Resource limits for better stability - optimized for single-node CRC
         resources:
           requests:
-            memory: "2Gi"
-            cpu: "500m"
+            memory: "1Gi"     # Reduced from 2Gi
+            cpu: "500m"       # Reduced from 1000m
           limits:
-            memory: "4Gi"
-            cpu: "2"
+            memory: "2Gi"     # Reduced from 4Gi
+            cpu: "1000m"      # Reduced from 2000m
+        # Health checks with more generous timeouts for AI model loading
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 180  # Give much more time for AI model startup
+          periodSeconds: 60         # Check less frequently
+          timeoutSeconds: 60        # Much more generous timeout
+          failureThreshold: 5       # Allow more failures before restart
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 120  # Wait longer before first check
+          periodSeconds: 45         # Check less frequently  
+          timeoutSeconds: 45        # Much more generous timeout
+          failureThreshold: 5       # Allow more failures before marking unready
+        # Environment variables
+        env:
+        - name: HF_HOME
+          value: "/tmp/.cache"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: crack-segmentation
+  name: crack-segmentation-dockerhub
 spec:
   selector:
-    app: crack-segmentation
+    app: crack-segmentation-dockerhub
   ports:
     - protocol: TCP
       port: 5000
